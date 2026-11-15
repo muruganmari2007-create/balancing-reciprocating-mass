@@ -108,7 +108,7 @@ $('question').addEventListener('keydown', (e) => {
 const boot = await fetch('/api/providers').then((r) => r.json());
 $('provider').innerHTML = [
   `<option value="auto">Auto (${esc(boot.default)})</option>`,
-  ...boot.providers.map((p) => `<option value="${p.id}" ${p.configured ? '' : 'disabled'}>${esc(p.label)}${p.configured ? '' : ' — no key'}</option>`),
+  ...boot.providers.filter((p) => p.configured).map((p) => `<option value="${p.id}">${esc(p.label)}</option>`),
 ].join('');
 $('examples').replaceChildren(...boot.examples.map((ex) => {
   const b = document.createElement('button');
