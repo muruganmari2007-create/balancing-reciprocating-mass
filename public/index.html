@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Animex</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="chat">
+      <header class="brand">
+        <div class="logo">▶</div>
+        <div>
+          <h1>Animex</h1>
+          <p>Mechanical engineering problems, solved &amp; animated.</p>
+        </div>
+      </header>
+
+      <div id="messages" class="messages" aria-live="polite"></div>
+
+      <div id="examples" class="examples"></div>
+
+      <form id="ask" class="composer">
+        <textarea id="question" rows="2" placeholder="Paste a syllabus problem, e.g. balancing of reciprocating masses…" required></textarea>
+        <div class="composer-row">
+          <select id="provider" title="Who solves the problem"></select>
+          <button type="submit" id="send">Explain</button>
+        </div>
+      </form>
+    </aside>
+
+    <main class="stage-wrap">
+      <div class="stage">
+        <svg id="stage" role="img" aria-label="Animated explanation"></svg>
+        <div id="empty" class="empty">Your animated explanation will play here.</div>
+      </div>
+      <p id="subtitle" class="subtitle"></p>
+      <div class="controls">
+        <button id="prev" title="Previous scene">⏮</button>
+        <button id="play" title="Play / pause (space)">▶</button>
+        <button id="next" title="Next scene">⏭</button>
+        <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline" />
+        <span id="clock" class="clock">0:00 / 0:00</span>
+        <select id="speed" title="Speed">
+          <option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option>
+        </select>
+        <button id="voice" class="on" title="Narration on/off">🔊</button>
+      </div>
+      <div id="sceneDots" class="dots"></div>
+    </main>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
