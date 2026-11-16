@@ -79,6 +79,12 @@ svg { display: block; }
 .sol .meta { margin-top: 8px; font-size: 11.5px; color: var(--ink-3); font-family: var(--font-math); }
 .sol.error .body { color: var(--bad); font-size: 13px; }
 .sol.pending .body { font-size: 13px; color: var(--ink-2); }
+.sol.notice { border-color: #f5c46b; background: #fffbf0; cursor: default; }
+.sol.notice h3 { color: #92400e; }
+.sol.notice p { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.sol .caution { margin: 0 0 8px; padding: 7px 10px; border-left: 3px solid #d97706; background: #fffbf0; font-size: 12.5px; color: #92400e; line-height: 1.45; }
+.btn-retry { padding: 6px 14px; border: 1px solid var(--blue-700); background: #fff; color: var(--blue-700); border-radius: var(--radius); font-weight: 600; font-size: 13px; cursor: pointer; }
+.btn-retry:hover { background: var(--blue-50); }
 
 /* ---------- viewer ---------- */
 .viewer { display: flex; flex-direction: column; align-items: center; padding: 18px 24px; gap: 10px; min-width: 0; overflow-y: auto; }

@@ -62,6 +62,29 @@ test('bubble sort result is sorted and swaps animate', () => {
   assert.deepEqual(end.order.map((c) => arr.values[c]), ['1', '4', '2', '5']);
 });
 
+test('Gemini falls back across models and explains busy / quota failures', async () => {
+  process.env.GEMINI_API_KEY = 'test-key';
+  process.env.GEMINI_MODEL = 'model-a,model-b';
+  const { PROVIDERS } = await import('../server/providers.js');
+  const realFetch = globalThis.fetch;
+  const reply = (status, message) => async () => new Response(JSON.stringify({ error: { message } }), { status });
+  try {
+    globalThis.fetch = reply(503, 'This model is currently experiencing high demand.');
+    await assert.rejects(PROVIDERS.gemini.generate('q'), (e) => e.kind === 'busy' && /tomorrow morning/.test(e.message) && e.tried.length === 2);
+    globalThis.fetch = reply(429, 'You exceeded your current quota, please check your plan.');
+    await assert.rejects(PROVIDERS.gemini.generate('q'), (e) => e.kind === 'quota' && /resets once a day/.test(e.message));
+    let calls = 0; // first model busy, second answers -> success marked as fallback
+    globalThis.fetch = async () => (++calls === 1
+      ? new Response('{}', { status: 503 })
+      : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"ok":1}' }] } }] }), { status: 200 }));
+    assert.equal(await PROVIDERS.gemini.generate('q'), '{"ok":1}');
+    assert.equal(PROVIDERS.gemini.lastWasFallback, true);
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.GEMINI_API_KEY; delete process.env.GEMINI_MODEL;
+  }
+});
+
 test('normalizer repairs junk from an LLM', () => {
   const reply = 'Sure!\n```json\n{"title":"T","scenes":[{"elements":[{"id":"a","type":"text","text":"hi"},{"type":"hologram"}],"actions":[{"do":"write","target":"a"},{"do":"explode","target":"a"},{"do":"fade","target":"zzz"}]}]}\n```';
   const { script, warnings } = normalizeScript(extractJson(reply));

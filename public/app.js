@@ -96,19 +96,30 @@ async function ask(question) {
       body: JSON.stringify({ question, provider: $('provider').value }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { kind: data.kind });
     const { script } = data;
     card.className = 'sol';
     card.querySelector('.body').innerHTML = `
       <h3>${esc(script.title)}</h3>
+      ${data.fallback ? '<p class="caution">The main AI model was busy, so a lighter backup model answered. Please double-check the numbers, or try again later for a fuller answer.</p>' : ''}
       ${script.answer ? `<p class="answer">${esc(script.answer)}</p>` : ''}
       ${script.steps.length ? `<ol>${script.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
       <div class="meta">${data.provider === 'local' ? 'built-in solver' : esc(data.model)} · ${data.cached ? 'cached' : `${(data.ms / 1000).toFixed(1)} s`} · ${script.scenes.length} steps${data.warnings.length ? ` · ${data.warnings.length} auto-fixed` : ''}</div>`;
     card.onclick = () => playScript(script, card);
     playScript(script, card);
   } catch (err) {
-    card.className = 'sol error';
-    card.querySelector('.body').textContent = `Couldn't solve that: ${err.message}`;
+    if (err.kind === 'busy' || err.kind === 'quota') {
+      // The AI service is overloaded or out of quota: explain, and offer a one-click retry.
+      card.className = 'sol notice';
+      card.querySelector('.body').innerHTML = `
+        <h3>${err.kind === 'quota' ? 'Daily AI quota used up' : 'AI is busy right now'}</h3>
+        <p>${esc(err.message)}</p>
+        <button type="button" class="btn-retry">Try again</button>`;
+      card.querySelector('.btn-retry').onclick = (e) => { e.stopPropagation(); card.remove(); ask(question); };
+    } else {
+      card.className = 'sol error';
+      card.querySelector('.body').textContent = `Couldn't solve that: ${err.message}`;
+    }
   } finally {
     $('send').disabled = false;
     $('loading').hidden = true;

@@ -42,7 +42,12 @@ export async function explain(question, requested) {
     }
     if (!script) throw lastErr;
   }
-  const result = { script, warnings, provider, model: provider === 'local' ? 'local' : PROVIDERS[provider].model(), ms: Date.now() - started };
+  const result = {
+    script, warnings, provider,
+    model: provider === 'local' ? 'local' : PROVIDERS[provider].model(),
+    fallback: provider !== 'local' && !!PROVIDERS[provider].lastWasFallback,
+    ms: Date.now() - started,
+  };
   cache.set(key, result);
   return result;
 }
@@ -50,5 +55,8 @@ export async function explain(question, requested) {
 /** Maps an error to an HTTP status + JSON body. */
 export function errorResponse(err) {
   if (!err.status || err.status >= 500) console.error(err);
-  return { status: err.status && err.status < 600 ? err.status : 500, body: { error: err.message || 'Server error' } };
+  const body = { error: err.message || 'Server error' };
+  if (err.kind) body.kind = err.kind; // 'busy' | 'quota' | 'key' → the page shows a retry notice
+  if (err.tried) body.tried = err.tried;
+  return { status: err.status && err.status < 600 ? err.status : 500, body };
 }

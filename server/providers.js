@@ -6,16 +6,24 @@ const env = (k) => (process.env[k] || '').trim();
 const TIMEOUT_MS = 120_000;
 
 /** fetch with a hard time limit; a timeout is reported clearly and is not retried. */
-async function fetchWithTimeout(url, options, label) {
+async function fetchWithTimeout(url, options, label, timeoutMs = TIMEOUT_MS) {
   try {
-    return await fetch(url, { ...options, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    return await fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
     if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-      throw Object.assign(new Error(`${label} did not answer within ${TIMEOUT_MS / 1000} s (it is probably overloaded). Please try again in a minute.`), { status: 504, noRetry: true });
+      throw Object.assign(new Error(`${label} did not answer within ${Math.round(timeoutMs / 1000)} s (it is probably overloaded). Please try again in a minute.`), { status: 504, noRetry: true, kind: 'busy' });
     }
     throw err;
   }
 }
+
+// Messages shown to the student when the AI service is unavailable.
+const BUSY_MSG = 'Gemini is very busy right now (high demand on Google\'s servers), and every model we tried was overloaded. Please try again in a few minutes, or tomorrow morning when traffic is lower. The built-in topics below still work instantly.';
+const QUOTA_MSG = 'Gemini\'s free daily quota for this app is used up. It resets once a day (midnight Pacific Time, about 1:30 PM IST), so please try again tomorrow. The built-in topics below still work instantly.';
+
+/** The model list: GEMINI_MODEL may be "a,b,c" — tried in order until one answers. */
+const DEFAULT_GEMINI_MODELS = 'gemini-3.8-flash,gemini-3.5-flash-lite,gemini-flash-lite-latest';
+const geminiModels = () => (env('GEMINI_MODEL') || DEFAULT_GEMINI_MODELS).split(',').map((m) => m.trim()).filter(Boolean);
 
 export const PROVIDERS = {
   anthropic: {
@@ -50,23 +58,60 @@ export const PROVIDERS = {
   gemini: {
     label: 'Gemini (Google, free tier)',
     configured: () => !!env('GEMINI_API_KEY'),
-    model: () => env('GEMINI_MODEL') || 'gemini-3.8-flash',
+    model() { return this.lastModel || geminiModels()[0]; },
+    /**
+     * Tries each model in GEMINI_MODEL in turn. A busy (503), rate-limited / out-of-quota (429),
+     * retired (404) or slow model is skipped. If none answers, the error says whether to retry
+     * in a few minutes / tomorrow morning (busy) or after the daily quota reset (quota).
+     */
     async generate(question) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model())}:generateContent`;
-      const res = await fetchWithTimeout(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt(question) }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 16000 },
-        }),
-      }, 'Gemini');
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(`Gemini ${res.status}: ${data.error?.message || res.statusText}`);
-      const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('');
-      if (!text) throw new Error(`Gemini returned no text (finishReason: ${data.candidates?.[0]?.finishReason})`);
-      return text;
+      const started = Date.now();
+      const BUDGET_MS = 140_000; // stays under the 150 s Vercel function limit
+      const failures = [];
+      for (const model of geminiModels()) {
+        const left = BUDGET_MS - (Date.now() - started);
+        if (left < 8_000) break;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+        let res, data;
+        try {
+          res = await fetchWithTimeout(url, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+              contents: [{ role: 'user', parts: [{ text: userPrompt(question) }] }],
+              generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 16000 },
+            }),
+          }, `Gemini (${model})`, Math.min(left, 75_000));
+          data = await res.json().catch(() => ({}));
+        } catch (err) {
+          if (err.kind !== 'busy') throw err;
+          failures.push({ model, kind: 'busy' });
+          console.warn(`[gemini] ${model}: timed out, trying next model`);
+          continue;
+        }
+        if (res.ok) {
+          const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('');
+          if (text) {
+            this.lastModel = model;
+            this.lastWasFallback = model !== geminiModels()[0]; // lighter backup model: less reliable maths
+            return text;
+          }
+          failures.push({ model, kind: 'empty' });
+          continue;
+        }
+        const msg = data.error?.message || res.statusText;
+        if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key/i.test(msg))) {
+          throw Object.assign(new Error(`Gemini rejected the API key: ${msg}`), { status: 400, noRetry: true, kind: 'key' });
+        }
+        const kind = res.status === 429 ? (/quota/i.test(msg) ? 'quota' : 'busy') : res.status === 503 || res.status >= 500 ? 'busy' : 'unavailable';
+        failures.push({ model, kind });
+        console.warn(`[gemini] ${model}: ${res.status} ${msg.slice(0, 80)} — trying next model`);
+      }
+      const quota = failures.length && failures.every((f) => f.kind === 'quota' || f.kind === 'unavailable');
+      throw Object.assign(new Error(quota ? QUOTA_MSG : BUSY_MSG), {
+        status: 503, noRetry: true, kind: quota ? 'quota' : 'busy', tried: failures.map((f) => `${f.model}: ${f.kind}`),
+      });
     },
   },
 
