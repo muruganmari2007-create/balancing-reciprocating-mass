@@ -1,22 +1,14 @@
-// Player: owns the clock, swaps scenes, drives narration (Web Speech API — free, offline-capable).
-import { STAGE } from './script.js';
+// Player: owns the clock, switches steps, drives narration (Web Speech API — free).
 import { buildTimeline, locate } from './timeline.js';
-import { mountScene } from './renderer.js';
-
-const NS = 'http://www.w3.org/2000/svg';
+import { StageRenderer } from './renderer.js';
+import { varsAt } from './dynamic.js';
 
 export class Player extends EventTarget {
   constructor(svg) {
     super();
-    this.svg = svg;
-    svg.setAttribute('viewBox', `0 0 ${STAGE.w} ${STAGE.h}`);
-    this.layer = document.createElementNS(NS, 'g');
-    this.caption = document.createElementNS(NS, 'text');
-    Object.entries({ x: 8, y: 9, 'font-size': 4.2, 'font-weight': 700, fill: 'var(--stage-caption)', 'font-family': 'var(--font-sans)' })
-      .forEach(([k, v]) => this.caption.setAttribute(k, v));
-    svg.append(this.layer, this.caption);
+    this.stage = new StageRenderer(svg);
     this.T = 0; this.playing = false; this.speed = 1; this.voice = true;
-    this.timeline = null; this.current = -1; this.render = null; this.spoken = -1;
+    this.timeline = null; this.current = -1; this.spoken = -1;
     this._tick = this._tick.bind(this);
   }
 
@@ -24,6 +16,7 @@ export class Player extends EventTarget {
     this.stopSpeech();
     this.script = script;
     this.timeline = buildTimeline(script);
+    this.stage.setScript(script);
     this.current = -1; this.spoken = -1;
     this.seek(0);
   }
@@ -49,7 +42,7 @@ export class Player extends EventTarget {
   seek(T, { fromUser = false } = {}) {
     if (!this.timeline) return;
     this.T = Math.max(0, Math.min(T, this.timeline.total));
-    if (fromUser) { // after a scrub, stay quiet until the next scene starts naturally
+    if (fromUser) { // after a scrub, stay quiet until the next step starts naturally
       this.stopSpeech();
       this.spoken = locate(this.timeline, this.T).entry.index;
     }
@@ -80,7 +73,7 @@ export class Player extends EventTarget {
     this._last = now;
     const { entry, local } = locate(this.timeline, this.T);
     const atSceneEnd = local + dt >= entry.duration - 0.02;
-    // Hold the last frame of a scene until the narrator finishes talking.
+    // Hold the last frame of a step until the narrator finishes talking.
     const waitForVoice = atSceneEnd && this.voice && speechSynthesis?.speaking && this.spoken === entry.index;
     if (!waitForVoice) this.T = Math.min(this.T + dt, this.timeline.total);
     this._draw();
@@ -92,16 +85,14 @@ export class Player extends EventTarget {
     const { entry, local } = locate(this.timeline, this.T);
     if (entry.index !== this.current) {
       this.current = entry.index;
-      this.render = mountScene(this.layer, entry.scene);
-      this.caption.textContent = entry.scene.caption || '';
-      this.layer.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 260 });
+      this.stage.showScene(entry);
       this.dispatchEvent(new CustomEvent('scene', { detail: entry }));
     }
     if (this.playing && this.spoken !== entry.index && local < 0.5) {
       this.spoken = entry.index;
       this._speak(entry.scene.narration);
     }
-    this.render(local);
+    this.stage.render(local, varsAt(this.script, this.timeline, entry, local));
     this._emit();
   }
 

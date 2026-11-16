@@ -26,5 +26,15 @@ export function plotMapper(el) {
   const left = el.x - el.w / 2, top = el.y - el.h / 2;
   const sx = (vx) => left + ((vx - el.xmin) / (el.xmax - el.xmin)) * el.w;
   const sy = (vy) => top + el.h - ((vy - ymin) / (ymax - ymin)) * el.h;
-  return { f, ymin, ymax, sx, sy, left, top };
+  /** Curve value at x (formula, or linear interpolation through data points). */
+  const valueAt = (vx) => {
+    if (!el.points) return f(vx);
+    const P = el.points;
+    for (let k = P.length - 1; k > 0; k--) {
+      const [x0, y0] = P[k - 1], [x1, y1] = P[k];
+      if (vx >= x0 && vx <= x1 && x1 > x0) return y0 + ((vx - x0) / (x1 - x0)) * (y1 - y0);
+    }
+    return vx <= P[0][0] ? P[0][1] : P.at(-1)[1];
+  };
+  return { f, ymin, ymax, sx, sy, left, top, valueAt };
 }

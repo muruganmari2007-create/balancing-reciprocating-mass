@@ -32,6 +32,19 @@ No API key? It still works: the built-in mechanical solvers above run offline (p
 
 **The key idea:** the LLM never draws pixels or writes executable code. It writes a small, declarative **Animex Script**: scenes made of elements (text, box, circle, arrow, array, bars, plot…) plus a timeline of actions (`write`, `draw`, `grow`, `move`, `highlight`, `swap`, `change`…). A deterministic engine in the browser renders it.
 
+**Moving diagrams (Script v2):** one engineering diagram stays on screen for every step (left), while the step panel (right) shows Formula → Substitution → Result. Any coordinate can be a live formula of time, evaluated every frame by a safe parser (no `eval`):
+
+```json
+"diagram": {
+  "vars": { "th": { "expr": "1.5708*t", "angle": true } },
+  "elements": [
+    { "id": "crank", "type": "line", "x1": 30, "y1": 48, "x2": "30 + 12*cos(th)", "y2": "48 - 12*sin(th)" }
+  ]
+}
+```
+
+A step can override a variable (e.g. `"vars": {"th": "rad(60)"}` freezes the crank at the asked angle; the change glides smoothly), emphasise parts with `"focus"`, and graphs can carry a `"marker"` that rides the curve in sync with the motion.
+
 | Approach we considered | Cost / speed | Quality | Safety | Verdict |
 |---|---|---|---|---|
 | LLM writes **Manim/Python** → render video server-side | slow (30s–minutes), needs Python + ffmpeg + LaTeX | beautiful when it works, often crashes | runs untrusted code | good "export" upgrade later |

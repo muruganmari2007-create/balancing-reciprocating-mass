@@ -3,6 +3,19 @@ import Anthropic from '@anthropic-ai/sdk';
 import { SYSTEM_PROMPT, userPrompt } from './prompt.js';
 
 const env = (k) => (process.env[k] || '').trim();
+const TIMEOUT_MS = 120_000;
+
+/** fetch with a hard time limit; a timeout is reported clearly and is not retried. */
+async function fetchWithTimeout(url, options, label) {
+  try {
+    return await fetch(url, { ...options, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch (err) {
+    if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+      throw Object.assign(new Error(`${label} did not answer within ${TIMEOUT_MS / 1000} s (it is probably overloaded). Please try again in a minute.`), { status: 504, noRetry: true });
+    }
+    throw err;
+  }
+}
 
 export const PROVIDERS = {
   anthropic: {
@@ -40,15 +53,15 @@ export const PROVIDERS = {
     model: () => env('GEMINI_MODEL') || 'gemini-3.8-flash',
     async generate(question) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model())}:generateContent`;
-      const res = await fetch(url, {
+      const res = await fetchWithTimeout(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': env('GEMINI_API_KEY') },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ role: 'user', parts: [{ text: userPrompt(question) }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 12000 },
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 16000 },
         }),
-      });
+      }, 'Gemini');
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`Gemini ${res.status}: ${data.error?.message || res.statusText}`);
       const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('');
@@ -63,7 +76,7 @@ export const PROVIDERS = {
     model: () => env('OPENAI_COMPAT_MODEL') || 'llama-3.3-70b-versatile',
     async generate(question) {
       const base = (env('OPENAI_COMPAT_BASE_URL') || 'https://api.groq.com/openai/v1').replace(/\/$/, '');
-      const res = await fetch(`${base}/chat/completions`, {
+      const res = await fetchWithTimeout(`${base}/chat/completions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${env('OPENAI_COMPAT_API_KEY')}` },
         body: JSON.stringify({
@@ -76,7 +89,7 @@ export const PROVIDERS = {
             { role: 'user', content: userPrompt(question) },
           ],
         }),
-      });
+      }, 'The LLM');
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(`LLM ${res.status}: ${data.error?.message || res.statusText}`);
       const text = data.choices?.[0]?.message?.content;

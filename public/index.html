@@ -3,53 +3,94 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Animex</title>
+  <title>Animex — Mechanical engineering, animated</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
-    <aside class="chat">
-      <header class="brand">
-        <div class="logo">▶</div>
-        <div>
-          <h1>Animex</h1>
-          <p>Mechanical engineering problems, solved &amp; animated.</p>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="11" cy="16" r="7.5" fill="none" stroke="currentColor" stroke-width="2.2" />
+        <line x1="11" y1="16" x2="15.5" y2="10.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+        <line x1="15.5" y1="10.5" x2="27" y2="16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        <rect x="24" y="12.5" width="6" height="7" rx="1" fill="currentColor" />
+      </svg>
+      <span class="wordmark">ANIMEX</span>
+      <span class="divider"></span>
+      <span class="tagline">Mechanical engineering problems, solved &amp; animated</span>
+    </div>
+    <label class="solver">
+      <span>Solver</span>
+      <select id="provider" title="Who solves the problem"></select>
+    </label>
+  </header>
+
+  <div class="layout">
+    <aside class="workbook">
+      <section class="block">
+        <h2 class="eyebrow">Problem</h2>
+        <form id="ask" class="ask">
+          <textarea id="question" rows="5" placeholder="Paste a problem from your syllabus — e.g. a single cylinder engine runs at 240 rpm…" required></textarea>
+          <button type="submit" id="send" class="btn-primary">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
+            Solve &amp; animate
+          </button>
+        </form>
+      </section>
+
+      <section class="block">
+        <h2 class="eyebrow">Syllabus examples</h2>
+        <ul id="examples" class="examples"></ul>
+      </section>
+
+      <section class="block solutions-block">
+        <h2 class="eyebrow">Solutions</h2>
+        <div id="messages" class="solutions" aria-live="polite">
+          <p class="hint">Solutions appear here as worked exam answers. Click one to replay its animation.</p>
         </div>
-      </header>
-
-      <div id="messages" class="messages" aria-live="polite"></div>
-
-      <div id="examples" class="examples"></div>
-
-      <form id="ask" class="composer">
-        <textarea id="question" rows="2" placeholder="Paste a syllabus problem, e.g. balancing of reciprocating masses…" required></textarea>
-        <div class="composer-row">
-          <select id="provider" title="Who solves the problem"></select>
-          <button type="submit" id="send">Explain</button>
-        </div>
-      </form>
+      </section>
     </aside>
 
-    <main class="stage-wrap">
+    <main class="viewer">
+      <div class="viewer-head">
+        <p class="eyebrow" id="kicker">Animation</p>
+        <h1 id="lessonTitle">Pick an example or paste a problem</h1>
+      </div>
+
       <div class="stage">
         <svg id="stage" role="img" aria-label="Animated explanation"></svg>
-        <div id="empty" class="empty">Your animated explanation will play here.</div>
+        <div id="empty" class="empty">
+          <svg viewBox="0 0 120 60" aria-hidden="true">
+            <circle cx="30" cy="34" r="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" />
+            <line x1="30" y1="34" x2="40" y2="22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+            <line x1="40" y1="22" x2="88" y2="34" stroke="currentColor" stroke-width="2" />
+            <rect x="86" y="27" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2" />
+          </svg>
+          <p>The diagram for your problem will appear here, and it moves.</p>
+        </div>
+        <div id="loading" class="loading" hidden>
+          <div class="bar"><span></span></div>
+          <p id="loadingText">Solving…</p>
+        </div>
       </div>
-      <p id="subtitle" class="subtitle"></p>
+
+      <ol id="steps" class="steps"></ol>
+
       <div class="controls">
-        <button id="prev" title="Previous scene">⏮</button>
-        <button id="play" title="Play / pause (space)">▶</button>
-        <button id="next" title="Next scene">⏭</button>
-        <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline" />
+        <button id="prev" class="icon-btn" title="Previous step"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12 18 18V6z" fill="currentColor" /></svg></button>
+        <button id="play" class="play-btn" title="Play / pause (space)"></button>
+        <button id="next" class="icon-btn" title="Next step"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" fill="currentColor" /></svg></button>
+        <div class="scrub-wrap"><input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Timeline" /><div id="ticks" class="ticks"></div></div>
         <span id="clock" class="clock">0:00 / 0:00</span>
-        <select id="speed" title="Speed">
+        <select id="speed" title="Playback speed">
           <option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option>
         </select>
-        <button id="voice" class="on" title="Narration on/off">🔊</button>
+        <button id="voice" class="icon-btn on" title="Narration on/off"></button>
       </div>
-      <div id="sceneDots" class="dots"></div>
+      <p id="subtitle" class="subtitle"></p>
     </main>
   </div>
   <script type="module" src="app.js"></script>
